@@ -1,4 +1,4 @@
-module.exports = (req, res) => {
+module.exports = async (req, res) => {
   const { order_id } = req.query;
 
   if (!order_id) {
@@ -7,10 +7,24 @@ module.exports = (req, res) => {
     });
   }
 
-  return res.status(200).json({
-    order_id,
-    status: "processing",
-    price: 199,
-    download_url: null
-  });
+  try {
+    const response = await fetch("https://hook.eu2.make.com/wvw8a6xobfpmuswkv3nn77j2n5kb6x4n", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ order_id })
+    });
+
+    const data = await response.json();
+
+    return res.status(200).json({
+      order_id,
+      ...data
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: "failed to fetch from make"
+    });
+  }
 };
