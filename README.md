@@ -1,34 +1,25 @@
-# Taxoma API
-
 ## order-status endpoint
 
-This endpoint is used by the `/finished` page to check the current state of an order in real time.
+This endpoint is used by the `/finished` page to allow the user to download their final XML file once the processing is complete.
 
 ### How it works
 
-1. The frontend page `/finished` reads `order_key` from the URL.
-2. It calls the Vercel API endpoint:
-   `/api/order-status?order_key=...`
-3. The Vercel function sends the `order_key` to a Make.com webhook.
-4. Make.com looks up the matching record in Data Store.
-5. Make.com returns the current order state back to Vercel.
-6. Vercel returns JSON to the frontend.
-7. The frontend can repeat this request (polling) until the document is ready.
+1. The frontend reads `order_key` from the URL.
+2. It calls `/api/order-status?order_key=...`
+3. The request is forwarded to Make.com.
+4. Make retrieves the order from Data Store.
+5. The current status and data are returned back to the frontend.
 
-### Returned data
+### Response
 
-The endpoint returns:
+- `order_key` – unique identifier
+- `status` – processing state
+- `tax_amount` – calculated tax
+- `download_url` – link to the final XML file
 
-- `order_key` – unique order identifier
-- `status` – current processing state
-- `tax_amount` – calculated tax amount
-- `download_url` – download link for the generated XML file
+### Purpose
 
-### Main purpose
-
-This endpoint allows the `/finished` page to:
-
-- show current processing status
-- display the tax amount
-- wait until the XML is ready
-- show the download link when available
+The main goal is to:
+- track processing status
+- wait until the XML is generated
+- allow the user to download the file at the end of the process
