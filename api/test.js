@@ -1,9 +1,9 @@
 module.exports = async (req, res) => {
-  const { order_id } = req.query;
+  const { order_key } = req.query;
 
-  if (!order_id) {
+  if (!order_key) {
     return res.status(400).json({
-      error: "missing order_id"
+      error: "missing order_key"
     });
   }
 
@@ -13,13 +13,13 @@ module.exports = async (req, res) => {
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ order_id })
+      body: JSON.stringify({ order_key })
     });
 
     const data = await response.json();
 
     return res.status(200).json({
-      order_id,
+      order_key,
       ...data
     });
   } catch (error) {
