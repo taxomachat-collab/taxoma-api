@@ -1,3 +1,7 @@
+// Used by /processing page
+// Maps external submission_id to internal order_key
+// Returns current state of order creation (waiting / ready_for_payment)
+
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*")
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS")
