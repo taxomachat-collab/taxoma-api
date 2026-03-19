@@ -16,7 +16,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const response = await fetch("SEM_VLOZ_NOVY_WEBHOOK", {
+    const response = await fetch("https://hook.eu2.make.com/hmrp34yaqnj5io0rytrz0xvk431s36bn", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
