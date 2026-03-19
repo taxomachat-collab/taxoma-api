@@ -19,7 +19,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const response = await fetch("SEM_DEJ_WEBHOOK_URL", {
+    const response = await fetch("https://hook.eu2.make.com/d41g49upyg8qzbn2uq2vvxr3mxtlxue4", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
