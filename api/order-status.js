@@ -1,3 +1,4 @@
+// Used by /finished page to poll order status and retrieve XML download URL
 module.exports = async (req, res) => {
   const { order_key } = req.query;
 
