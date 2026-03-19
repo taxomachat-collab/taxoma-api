@@ -1,5 +1,3 @@
-// Used by /processing page to retrieve order_key from submission_id
-
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*")
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS")
@@ -18,7 +16,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const response = await fetch("https://hook.eu2.make.com/hmrp34yaqnj5io0rytrz0xvk431s36bn", {
+    const response = await fetch("SEM_VLOZ_NOVY_WEBHOOK", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -26,17 +24,8 @@ module.exports = async (req, res) => {
       body: JSON.stringify({ submission_id }),
     })
 
-    const text = await response.text()
-
-    try {
-      const data = JSON.parse(text)
-      return res.status(200).json(data)
-    } catch {
-      return res.status(500).json({
-        error: "make returned invalid json",
-        raw_response: text,
-      })
-    }
+    const data = await response.json()
+    return res.status(200).json(data)
   } catch (error) {
     return res.status(500).json({
       error: "failed to fetch from make",
