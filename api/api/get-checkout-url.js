@@ -1,6 +1,5 @@
 // Used by /payment page
-// Retrieves existing Stripe checkout URL using order_key
-// Redirects user to Stripe payment
+// Sends order_key to Make webhook
 
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*")
@@ -20,7 +19,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const response = await fetch("https://hook.eu2.make.com/d41g49upyg8qzbn2uq2vvxr3mxtlxue4", {
+    const response = await fetch("SEM_DEJ_WEBHOOK_URL", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
