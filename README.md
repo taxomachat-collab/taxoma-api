@@ -23,3 +23,36 @@ The main goal is to:
 - track processing status
 - wait until the XML is generated
 - allow the user to download the file at the end of the process
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+## order-from-submission endpoint
+
+This endpoint is used by the /processing page to translate a form submission into an internal order.
+
+It allows the system to check whether an order has already been created for a given submission.
+
+### How it works
+
+1. The frontend reads `submission_id` from the URL.
+2. It calls `/api/order-from-submission?submission_id=...`
+3. The request is forwarded to Make.com.
+4. Make searches the Data Store for a record with the given `submission_id`.
+5. If found, the corresponding `order_key` is returned.
+6. If not found, a waiting status is returned.
+
+### Response
+
+- `status` – current state of the lookup  
+  - `waiting` → order not yet created  
+  - `ready_for_payment` → order found  
+
+- `order_key` – internal identifier (only when ready)
+
+### Purpose
+
+The main goal is to:
+
+- bridge external form systems with internal logic  
+- wait until the order is created  
+- provide the frontend with `order_key` for further steps (payment, status, etc.)
