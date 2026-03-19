@@ -61,32 +61,34 @@ The main goal is to:
 
 ## get-checkout-url endpoint
 
-This endpoint is used by the /payment page to retrieve the Stripe checkout URL for a given order.
+How it works
+	1.	The frontend reads order_key from the URL.
+	2.	It calls /api/get-checkout-url?order_key=....
+	3.	The request is forwarded to Make.com.
+	4.	Make retrieves the order from the Data Store using order_key.
+	5.	If the checkout_url is already available, it is returned immediately.
+	6.	If not, the frontend keeps calling the endpoint repeatedly (polling).
+	7.	Once the checkout_url is available, the frontend redirects the user to Stripe.
 
-It does not create a new checkout session. Instead, it returns an already existing session that was created earlier in the flow.
+⸻
 
-### How it works
+Response
+	•	checkout_url – Stripe payment URL (may be empty if not ready yet)
 
-1. The frontend reads `order_key` from the URL.
-2. It calls `/api/get-checkout-url?order_key=...`
-3. The request is forwarded to Make.com.
-4. Make retrieves the order from the Data Store using `order_key`.
-5. The stored `checkout_url` is returned.
+⸻
 
-### Response
-
-- `checkout_url` – Stripe payment URL
-
-### Purpose
+Purpose
 
 The main goal is to:
+	•	safely retrieve the payment URL
+	•	handle asynchronous creation of Stripe checkout sessions
+	•	avoid creating duplicate Stripe sessions
+	•	ensure a smooth user experience with delayed processing
 
-- safely retrieve the payment URL  
-- avoid creating duplicate Stripe sessions  
-- keep payment logic centralized in the backend  
+⸻
 
-### Notes
-
-- Checkout session is created earlier (in the main processing flow)  
-- This endpoint only returns existing data  
-- `order_key` is the primary identifier used across the system
+Notes
+	•	Checkout session is created earlier (in the main processing flow)
+	•	The endpoint does not create a new session, only retrieves existing data
+	•	checkout_url may not be immediately available due to async processing
+	•	Frontend handles this by polling until the URL is ready
