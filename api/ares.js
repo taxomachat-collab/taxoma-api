@@ -1,259 +1,333 @@
-import * as React from "react"
-import { addPropertyControls, ControlType } from "framer"
+/**
+ * ARES lookup API endpoint for Taxoma
+ *
+ * Acts as a middleware between frontend (Framer / Fillout) and the official ARES API.
+ * - accepts ICO as input
+ * - validates format and checksum
+ * - fetches data from ARES registry
+ * - normalizes response into a consistent structure
+ * - returns JSON ready for frontend form prefill
+ *
+ * Includes CORS headers to allow cross-origin requests (e.g. from Framer).
+ *
+ * Only supports natural persons (OSVČ).
+ * Legal entities (companies) are marked as unsupported.
+ */
 
-export default function IcoLookupRedirect(props) {
-    const [ico, setIco] = React.useState("")
-    const [loading, setLoading] = React.useState(false)
-    const [error, setError] = React.useState("")
+const ARES_BASE_URL =
+    "https://ares.gov.cz/ekonomicke-subjekty-v-be/rest"
 
-    const handleSubmit = async () => {
-        const cleanIco = ico.replace(/\D/g, "")
+function setCors(res) {
+    res.setHeader("Access-Control-Allow-Origin", "*")
+    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS")
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type")
+}
 
-        if (!/^\d{8}$/.test(cleanIco)) {
-            setError("IČO musí mít 8 číslic.")
-            return
-        }
+function isValidIcoFormat(ico) {
+    return /^\d{8}$/.test(ico)
+}
 
-        setLoading(true)
-        setError("")
+function isValidIcoChecksum(ico) {
+    if (!/^\d{8}$/.test(ico)) return false
 
-        try {
-            const res = await fetch(
-                `${props.apiBaseUrl}/api/ares?ico=${encodeURIComponent(cleanIco)}`
-            )
-            const data = await res.json()
-
-            if (!data.success) {
-                if (data.error === "subject_not_found") {
-                    setError("Zadané IČO se nepodařilo najít.")
-                } else if (
-                    data.error === "invalid_ico_format" ||
-                    data.error === "invalid_ico_checksum"
-                ) {
-                    setError("IČO není platné.")
-                } else {
-                    setError("Nepodařilo se načíst údaje. Zkuste to znovu.")
-                }
-                return
-            }
-
-            const s = data.subject
-
-            if (!s.is_supported_for_this_service) {
-                setError("Tahle služba je určena pouze pro OSVČ.")
-                return
-            }
-
-            const parts = String(s.name || "")
-                .trim()
-                .split(/\s+/)
-            const first_name = parts[0] || ""
-            const last_name = parts.slice(1).join(" ") || ""
-
-            const params = new URLSearchParams({
-                ico: s.ico || "",
-                dic: s.dic || "",
-                first_name,
-                last_name,
-                street: s.street || "",
-                house_number: String(s.descriptive_number ?? ""),
-                orientation_number: String(s.orientation_number ?? ""),
-                city: s.city || "",
-                postal_code: s.zip || "",
-            })
-
-            window.location.href = `${props.filloutUrl}?${params.toString()}`
-        } catch (e) {
-            setError("Nepodařilo se načíst údaje. Zkuste to znovu.")
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    const onKeyDown = (e) => {
-        if (e.key === "Enter" && !loading) {
-            handleSubmit()
-        }
-    }
-
-    return (
-        <div style={wrapperStyle}>
-            {props.showHeading && (
-                <h3 style={headingStyle}>{props.headingText}</h3>
-            )}
-
-            {props.showDescription && (
-                <p style={descriptionStyle}>{props.descriptionText}</p>
-            )}
-
-            <div style={rowStyle(props.stackOnMobile)}>
-                <input
-                    value={ico}
-                    onChange={(e) => setIco(e.target.value)}
-                    onKeyDown={onKeyDown}
-                    inputMode="numeric"
-                    placeholder={props.placeholder}
-                    style={inputStyle}
-                    disabled={loading}
-                />
-
-                <button
-                    onClick={handleSubmit}
-                    disabled={loading}
-                    style={buttonStyle}
-                >
-                    {loading ? props.loadingText : props.buttonText}
-                </button>
-            </div>
-
-            <div style={messageWrapStyle}>
-                {error ? (
-                    <p style={errorStyle}>{error}</p>
-                ) : (
-                    <p style={hintStyle}>{props.hintText}</p>
-                )}
-            </div>
-        </div>
+    const digits = ico.split("").map(Number)
+    const weights = [8, 7, 6, 5, 4, 3, 2]
+    const sum = weights.reduce(
+        (acc, weight, i) => acc + digits[i] * weight,
+        0
     )
+    const mod = sum % 11
+
+    let checkDigit
+    if (mod === 0) checkDigit = 1
+    else if (mod === 1) checkDigit = 0
+    else checkDigit = 11 - mod
+
+    return digits[7] === checkDigit
 }
 
-addPropertyControls(IcoLookupRedirect, {
-    apiBaseUrl: {
-        type: ControlType.String,
-        title: "API Base URL",
-        defaultValue: "https://project-r6ccw.vercel.app",
-    },
-    filloutUrl: {
-        type: ControlType.String,
-        title: "Fillout URL",
-        defaultValue: "https://taxoma.fillout.com/t/9HrgSPozHous",
-    },
-    showHeading: {
-        type: ControlType.Boolean,
-        title: "Show Heading",
-        defaultValue: true,
-    },
-    headingText: {
-        type: ControlType.String,
-        title: "Heading",
-        defaultValue: "Vyplnění přiznání začíná zde",
-    },
-    showDescription: {
-        type: ControlType.Boolean,
-        title: "Show Description",
-        defaultValue: true,
-    },
-    descriptionText: {
-        type: ControlType.String,
-        title: "Description",
-        defaultValue:
-            "Zadejte IČO a údaje o podnikateli automaticky načteme z registru ARES.",
-    },
-    placeholder: {
-        type: ControlType.String,
-        title: "Placeholder",
-        defaultValue: "Zadejte IČO",
-    },
-    buttonText: {
-        type: ControlType.String,
-        title: "Button",
-        defaultValue: "Načíst údaje →",
-    },
-    loadingText: {
-        type: ControlType.String,
-        title: "Loading",
-        defaultValue: "Načítám…",
-    },
-    hintText: {
-        type: ControlType.String,
-        title: "Hint",
-        defaultValue: "Podporujeme pouze OSVČ.",
-    },
-    stackOnMobile: {
-        type: ControlType.Boolean,
-        title: "Stack Mobile",
-        defaultValue: true,
-    },
-})
-
-const wrapperStyle = {
-    width: "100%",
-    maxWidth: 760,
-    margin: "0 auto",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    textAlign: "center",
+function cleanZip(value) {
+    if (!value) return ""
+    return String(value).replace(/\s+/g, "")
 }
 
-const headingStyle = {
-    margin: 0,
-    marginBottom: 14,
-    fontSize: "clamp(28px, 4vw, 42px)",
-    lineHeight: 1.1,
-    fontWeight: 500,
-    color: "#161616",
+function firstNonEmpty(...values) {
+    for (const value of values) {
+        if (value === null || value === undefined) continue
+        if (typeof value === "string" && value.trim() === "") continue
+        return value
+    }
+    return ""
 }
 
-const descriptionStyle = {
-    margin: 0,
-    marginBottom: 24,
-    fontSize: "clamp(17px, 1.8vw, 22px)",
-    lineHeight: 1.45,
-    color: "rgba(22,22,22,0.72)",
-    maxWidth: 680,
+function getByPath(obj, path) {
+    return path.split(".").reduce((acc, key) => {
+        if (acc === null || acc === undefined) return undefined
+        return acc[key]
+    }, obj)
 }
 
-const rowStyle = () => ({
-    width: "100%",
-    display: "flex",
-    gap: 12,
-    alignItems: "stretch",
-    justifyContent: "center",
-    flexWrap: "wrap",
-})
-
-const inputStyle = {
-    flex: "1 1 320px",
-    minWidth: 240,
-    height: 56,
-    padding: "0 18px",
-    borderRadius: 999,
-    border: "1px solid rgba(22,22,22,0.12)",
-    background: "#fff",
-    fontSize: 16,
-    color: "#161616",
-    outline: "none",
-    boxSizing: "border-box",
+function pick(obj, paths) {
+    for (const path of paths) {
+        const value = getByPath(obj, path)
+        if (value === null || value === undefined) continue
+        if (typeof value === "string" && value.trim() === "") continue
+        return value
+    }
+    return ""
 }
 
-const buttonStyle = {
-    height: 56,
-    padding: "0 24px",
-    border: "none",
-    borderRadius: 999,
-    background: "#245FEA",
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: 600,
-    cursor: "pointer",
-    whiteSpace: "nowrap",
+function normalizeText(value) {
+    return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim()
 }
 
-const messageWrapStyle = {
-    minHeight: 28,
-    marginTop: 12,
+function detectSubjectType(data) {
+    const legalForm = firstNonEmpty(
+        pick(data, [
+            "pravniFormaNazev",
+            "pravniForma.text",
+            "pravniForma",
+            "ekonomickySubjekt.pravniFormaNazev",
+            "ekonomickySubjekt.pravniForma.text",
+        ])
+    )
+
+    const name = firstNonEmpty(
+        pick(data, [
+            "obchodniJmeno",
+            "nazev",
+            "jmeno",
+            "firma",
+            "ekonomickySubjekt.obchodniJmeno",
+        ])
+    )
+
+    const legalFormText = normalizeText(legalForm)
+    const nameText = normalizeText(name)
+
+    const companyMarkers = [
+        "spolecnost s rucenim omezenym",
+        "s.r.o",
+        "a.s",
+        "akciova spolecnost",
+        "druzstvo",
+        "z.s",
+        "zapsany spolek",
+        "ustav",
+        "nadace",
+        "obec",
+        "mesto",
+        "prispevkova organizace",
+        "v.o.s",
+        "k.s",
+    ]
+
+    const looksLikeCompany =
+        companyMarkers.some((marker) =>
+            legalFormText.includes(marker)
+        ) ||
+        companyMarkers.some((marker) => nameText.includes(marker))
+
+    if (looksLikeCompany) {
+        return {
+            subject_type: "company",
+            is_supported_for_this_service: false,
+            unsupported_reason: "legal_entity_not_supported",
+        }
+    }
+
+    return {
+        subject_type: "person",
+        is_supported_for_this_service: true,
+        unsupported_reason: "",
+    }
 }
 
-const hintStyle = {
-    margin: 0,
-    fontSize: 14,
-    color: "rgba(22,22,22,0.55)",
+function normalizeAresResponse(data, ico) {
+    const typeInfo = detectSubjectType(data)
+
+    return {
+        ico,
+        dic: firstNonEmpty(
+            pick(data, ["dic", "danoveIdentifikacniCislo"])
+        ),
+        name: firstNonEmpty(
+            pick(data, [
+                "obchodniJmeno",
+                "nazev",
+                "jmeno",
+                "firma",
+                "ekonomickySubjekt.obchodniJmeno",
+            ])
+        ),
+        legal_form: firstNonEmpty(
+            pick(data, [
+                "pravniFormaNazev",
+                "pravniForma.text",
+                "pravniForma",
+                "ekonomickySubjekt.pravniFormaNazev",
+                "ekonomickySubjekt.pravniForma",
+            ])
+        ),
+        street: firstNonEmpty(
+            pick(data, [
+                "sidlo.nazevUlice",
+                "sidlo.ulice",
+                "adresa.nazevUlice",
+                "adresa.ulice",
+                "sidlo.textovaAdresa",
+            ])
+        ),
+        descriptive_number: String(
+            firstNonEmpty(
+                pick(data, [
+                    "sidlo.cisloDomovni",
+                    "adresa.cisloDomovni",
+                    "sidlo.cisloPopisne",
+                    "adresa.cisloPopisne",
+                ])
+            )
+        ),
+        orientation_number: String(
+            firstNonEmpty(
+                pick(data, [
+                    "sidlo.cisloOrientacni",
+                    "adresa.cisloOrientacni",
+                ])
+            )
+        ),
+        city: firstNonEmpty(
+            pick(data, [
+                "sidlo.nazevObce",
+                "adresa.nazevObce",
+                "sidlo.obec",
+                "adresa.obec",
+            ])
+        ),
+        zip: cleanZip(
+            firstNonEmpty(pick(data, ["sidlo.psc", "adresa.psc"]))
+        ),
+        country_code: firstNonEmpty(
+            pick(data, [
+                "sidlo.kodStatu",
+                "adresa.kodStatu",
+                "sidlo.stat.kod",
+                "adresa.stat.kod",
+            ]),
+            "CZ"
+        ),
+        country_name: firstNonEmpty(
+            pick(data, [
+                "sidlo.nazevStatu",
+                "adresa.nazevStatu",
+                "sidlo.stat.nazev",
+                "adresa.stat.nazev",
+            ]),
+            "Česká republika"
+        ),
+        data_box: firstNonEmpty(
+            pick(data, [
+                "datovaSchranka",
+                "datovaSchrankaId",
+                "idDatoveSchranky",
+            ])
+        ),
+        nace_code: firstNonEmpty(
+            pick(data, [
+                "primarniCinnost.kod",
+                "hlavniEkonomickaCinnost.kod",
+                "czNace.kod",
+                "cinnosti.0.kod",
+            ])
+        ),
+        nace_name: firstNonEmpty(
+            pick(data, [
+                "primarniCinnost.nazev",
+                "hlavniEkonomickaCinnost.nazev",
+                "czNace.nazev",
+                "cinnosti.0.nazev",
+            ])
+        ),
+        subject_type: typeInfo.subject_type,
+        is_supported_for_this_service:
+            typeInfo.is_supported_for_this_service,
+        unsupported_reason: typeInfo.unsupported_reason,
+    }
 }
 
-const errorStyle = {
-    margin: 0,
-    fontSize: 14,
-    color: "#DC2626",
-    fontWeight: 500,
+export default async function handler(req, res) {
+    setCors(res)
+
+    if (req.method === "OPTIONS") {
+        return res.status(200).end()
+    }
+
+    if (req.method !== "GET") {
+        return res.status(405).json({
+            success: false,
+            error: "method_not_allowed",
+        })
+    }
+
+    const rawIco = req.query.ico || ""
+    const ico = String(rawIco).replace(/\D/g, "")
+
+    if (!isValidIcoFormat(ico)) {
+        return res.status(400).json({
+            success: false,
+            error: "invalid_ico_format",
+        })
+    }
+
+    if (!isValidIcoChecksum(ico)) {
+        return res.status(400).json({
+            success: false,
+            error: "invalid_ico_checksum",
+        })
+    }
+
+    try {
+        const response = await fetch(
+            `${ARES_BASE_URL}/ekonomicke-subjekty/${ico}`,
+            {
+                method: "GET",
+                headers: { Accept: "application/json" },
+            }
+        )
+
+        if (response.status === 404) {
+            return res.status(404).json({
+                success: false,
+                error: "subject_not_found",
+            })
+        }
+
+        if (!response.ok) {
+            const text = await response.text()
+            return res.status(502).json({
+                success: false,
+                error: "ares_upstream_error",
+                upstream_status: response.status,
+                upstream_body: text.slice(0, 500),
+            })
+        }
+
+        const data = await response.json()
+        const subject = normalizeAresResponse(data, ico)
+
+        return res.status(200).json({
+            success: true,
+            subject,
+        })
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            error: "internal_error",
+            message: error.message,
+        })
+    }
 }
