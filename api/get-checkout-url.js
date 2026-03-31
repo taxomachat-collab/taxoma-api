@@ -1,5 +1,7 @@
-// Returns Stripe checkout URL for given order_key
-// Used by /payment page (polling until URL is ready)
+// Proxy endpoint for Make webhook: get_checkout_url_by_order_key
+// Receives order_key from frontend (/payment page)
+// Sends it to Make and returns checkout_url when ready
+// Handles JSON parsing and propagates Make errors to frontend
 
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*")
@@ -31,10 +33,11 @@ module.exports = async (req, res) => {
 
     try {
       const data = JSON.parse(text)
-      return res.status(200).json(data)
+      return res.status(response.status).json(data)
     } catch {
       return res.status(500).json({
         error: "invalid JSON from Make",
+        make_status: response.status,
         raw: text,
       })
     }
