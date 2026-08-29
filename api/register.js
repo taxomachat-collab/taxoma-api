@@ -3,20 +3,18 @@
  *
  * Framer -> Vercel -> Make
  *
- * Make webhook is NEVER exposed to the frontend.
- * Store it in Vercel as:
+ * Make webhook is stored only in Vercel:
  * MAKE_REGISTER_WEBHOOK_URL
  */
 
-function setCors(res) {
+function setCors(req, res) {
     const allowedOrigins = [
         "https://taxoma.cz",
         "https://www.taxoma.cz",
-        // During Framer testing you can temporarily add
-        // your current Framer domain here.
+        "https://nuanced-outcomes-882593.framer.app",
     ]
 
-    const origin = res.req?.headers?.origin
+    const origin = req.headers.origin
 
     if (origin && allowedOrigins.includes(origin)) {
         res.setHeader("Access-Control-Allow-Origin", origin)
@@ -48,7 +46,9 @@ function isValidEmail(value) {
 }
 
 function isValidDate(value) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return false
+    }
 
     const date = new Date(`${value}T12:00:00Z`)
 
@@ -75,7 +75,10 @@ function normalizeBody(body) {
 
         street: text(body.street, 150),
         house_number: text(body.house_number, 30),
-        orientation_number: text(body.orientation_number, 30),
+        orientation_number: text(
+            body.orientation_number,
+            30
+        ),
         city: text(body.city, 150),
         postal_code: text(body.postal_code, 10),
 
@@ -118,7 +121,9 @@ function normalizeBody(body) {
             body.delivery_address_differs
         ),
 
-        register_reason: Number(body.register_reason),
+        register_reason: Number(
+            body.register_reason
+        ),
 
         submission_id: text(
             body.submission_id,
@@ -168,32 +173,46 @@ function validate(data) {
     }
 
     if (!isValidDate(data.liability_start_date)) {
-        errors.push("invalid_liability_start_date")
+        errors.push(
+            "invalid_liability_start_date"
+        )
     }
 
     if (!isValidReason(data.register_reason)) {
         errors.push("invalid_register_reason")
     }
 
-    if (!isValidSubmissionId(data.submission_id)) {
+    if (
+        !isValidSubmissionId(
+            data.submission_id
+        )
+    ) {
         errors.push("invalid_submission_id")
     }
 
     if (data.delivery_address_differs) {
         if (!data.delivery_street) {
-            errors.push("missing_delivery_street")
+            errors.push(
+                "missing_delivery_street"
+            )
         }
 
         if (!data.delivery_house_number) {
-            errors.push("missing_delivery_house_number")
+            errors.push(
+                "missing_delivery_house_number"
+            )
         }
 
         if (!data.delivery_city) {
-            errors.push("missing_delivery_city")
+            errors.push(
+                "missing_delivery_city"
+            )
         }
 
         if (!data.delivery_postal_code) {
-            errors.push("missing_delivery_postal_code")
+            errors.push(
+                "missing_delivery_postal_code"
+            )
         }
     }
 
@@ -201,7 +220,7 @@ function validate(data) {
 }
 
 export default async function handler(req, res) {
-    setCors(res)
+    setCors(req, res)
 
     if (req.method === "OPTIONS") {
         return res.status(204).end()
@@ -256,18 +275,23 @@ export default async function handler(req, res) {
             })
         }
 
-        const makeResponse = await fetch(webhookUrl, {
-            method: "POST",
+        const makeResponse = await fetch(
+            webhookUrl,
+            {
+                method: "POST",
 
-            headers: {
-                "Content-Type": "application/json",
-                Accept: "application/json",
-            },
+                headers: {
+                    "Content-Type":
+                        "application/json",
+                    Accept: "application/json",
+                },
 
-            body: JSON.stringify(data),
+                body: JSON.stringify(data),
 
-            signal: AbortSignal.timeout(15000),
-        })
+                signal:
+                    AbortSignal.timeout(15000),
+            }
+        )
 
         if (!makeResponse.ok) {
             console.error(
@@ -283,7 +307,8 @@ export default async function handler(req, res) {
 
         return res.status(200).json({
             success: true,
-            submission_id: data.submission_id,
+            submission_id:
+                data.submission_id,
         })
     } catch (error) {
         console.error(
