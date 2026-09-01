@@ -5,6 +5,23 @@ const FS_PAGE_URL =
 
 const CACHE_TTL = 24 * 60 * 60 * 1000
 
+const UFO_NAMES = {
+    "451": "Finanční úřad pro hlavní město Prahu",
+    "452": "Finanční úřad pro Středočeský kraj",
+    "453": "Finanční úřad pro Jihočeský kraj",
+    "454": "Finanční úřad pro Plzeňský kraj",
+    "455": "Finanční úřad pro Karlovarský kraj",
+    "456": "Finanční úřad pro Ústecký kraj",
+    "457": "Finanční úřad pro Liberecký kraj",
+    "458": "Finanční úřad pro Královéhradecký kraj",
+    "459": "Finanční úřad pro Pardubický kraj",
+    "460": "Finanční úřad pro Kraj Vysočina",
+    "461": "Finanční úřad pro Jihomoravský kraj",
+    "462": "Finanční úřad pro Olomoucký kraj",
+    "463": "Finanční úřad pro Moravskoslezský kraj",
+    "464": "Finanční úřad pro Zlínský kraj",
+}
+
 let cache = {
     loadedAt: 0,
     rows: null,
@@ -21,11 +38,7 @@ function normalize(value) {
 }
 
 async function findCurrentXlsxUrl() {
-    const response = await fetch(FS_PAGE_URL, {
-        headers: {
-            "User-Agent": "Taxoma/1.0",
-        },
-    })
+    const response = await fetch(FS_PAGE_URL)
 
     if (!response.ok) {
         throw new Error(`FS page returned ${response.status}`)
@@ -40,22 +53,12 @@ async function findCurrentXlsxUrl() {
     ]
 
     if (!matches.length) {
-        throw new Error("Příloha č. 4 XLSX nebyla na stránce FS nalezena.")
+        throw new Error("Příloha č. 4 XLSX nebyla nalezena.")
     }
 
-    let url = matches[0][1]
+    const href = matches[0][1].replace(/&amp;/g, "&")
 
-    url = url.replace(/&amp;/g, "&")
-
-    if (url.startsWith("/")) {
-        url = new URL(url, FS_PAGE_URL).href
-    }
-
-    if (!/^https?:\/\//i.test(url)) {
-        url = new URL(url, FS_PAGE_URL).href
-    }
-
-    return url
+    return new URL(href, FS_PAGE_URL).href
 }
 
 async function loadFsData() {
@@ -63,92 +66,106 @@ async function loadFsData() {
 
     if (
         cache.rows &&
-        cache.loadedAt &&
         now - cache.loadedAt < CACHE_TTL
     ) {
         return cache
     }
 
-    const xlsxUrl = await findCurrentXlsxUrl()
+    const sourceUrl = await findCurrentXlsxUrl()
 
-    const response = await fetch(xlsxUrl, {
-        headers: {
-            "User-Agent": "Taxoma/1.0",
-        },
-    })
+    const response = await fetch(sourceUrl)
 
     if (!response.ok) {
         throw new Error(`FS XLSX returned ${response.status}`)
     }
 
-    const arrayBuffer = await response.arrayBuffer()
+    const buffer = await response.arrayBuffer()
 
-    const workbook = XLSX.read(arrayBuffer, {
+    const workbook = XLSX.read(buffer, {
         type: "array",
     })
 
-    const firstSheetName = workbook.SheetNames[0]
+    const rows = []
 
-    if (!firstSheetName) {
-        throw new Error("XLSX Finanční správy neobsahuje žádný list.")
+    // Prohledáme všechny listy, ne pouze první.
+    for (const sheetName of workbook.SheetNames) {
+        const sheet = workbook.Sheets[sheetName]
+
+        const sheetRows = XLSX.utils.sheet_to_json(sheet, {
+            header: 1,
+            raw: false,
+            defval: "",
+        })
+
+        rows.push(...sheetRows)
     }
 
-    const sheet = workbook.Sheets[firstSheetName]
-
-    const rows = XLSX.utils.sheet_to_json(sheet, {
-        header: 1,
-        raw: false,
-        defval: "",
-    })
-
     if (!rows.length) {
-        throw new Error("XLSX Finanční správy je prázdný.")
+        throw new Error("XLSX neobsahuje žádná data.")
     }
 
     cache = {
         loadedAt: now,
         rows,
-        sourceUrl: xlsxUrl,
+        sourceUrl,
     }
 
     return cache
 }
 
-function findVatAccount(rows, ufoCode) {
+function extractVatAccount(value) {
+    const text = String(value ?? "")
+        .replace(/\s+/g, "")
+        .trim()
+
+    // Standardní český formát účtu DPH finanční správy.
+    const match = text.match(/705-\d{5,10}\/0710/)
+
+    return match ? match[0] : null
+}
+
+function findVatAccount(rows, officeName) {
+    const wantedOffice = normalize(officeName)
+
     /*
-     * Prozatím z XLSX hledáme:
-     * - řádek příslušného finančního úřadu
-     * - účet DPH začínající 705-
-     *
-     * UFO kód používáme hlavně k jednoznačnému napojení v dalším kroku.
-     *
-     * Důležité:
-     * pokud se struktura XLSX změní nebo účet nenajdeme jednoznačně,
-     * endpoint raději selže a frontend použije ruční fallback.
+     * Nejprve najdeme řádek, který obsahuje název
+     * konkrétního finančního úřadu.
      */
+    const officeRows = rows.filter((row) => {
+        const rowText = normalize(row.join(" "))
 
-    const accountRegex = /\b705-\d{5,10}\/0710\b/
-
-    const matchingRows = rows.filter((row) => {
-        const text = row.map(normalize).join(" ")
-        return text.includes(normalize(ufoCode))
+        return rowText.includes(wantedOffice)
     })
 
-    for (const row of matchingRows) {
-        for (const cell of row) {
-            const value = String(cell ?? "").trim()
-            const match = value.match(accountRegex)
+    /*
+     * Bez jednoznačně nalezeného FÚ nic neodhadujeme.
+     */
+    if (!officeRows.length) {
+        return null
+    }
 
-            if (match) {
-                return {
-                    account: match[0],
-                    row,
-                }
+    const accounts = new Set()
+
+    for (const row of officeRows) {
+        for (const cell of row) {
+            const account = extractVatAccount(cell)
+
+            if (account) {
+                accounts.add(account)
             }
         }
     }
 
-    return null
+    /*
+     * Bezpečnostní pojistka:
+     * přijmeme výsledek pouze tehdy, když jsme pro daný
+     * finanční úřad našli právě jeden účet DPH.
+     */
+    if (accounts.size !== 1) {
+        return null
+    }
+
+    return [...accounts][0]
 }
 
 export default async function handler(req, res) {
@@ -191,12 +208,25 @@ export default async function handler(req, res) {
         })
     }
 
+    const officeName = UFO_NAMES[ufoCode]
+
+    if (!officeName) {
+        return res.status(404).json({
+            ok: false,
+            error: "unknown_financial_office",
+            fallback: true,
+        })
+    }
+
     try {
         const fsData = await loadFsData()
 
-        const result = findVatAccount(fsData.rows, ufoCode)
+        const account = findVatAccount(
+            fsData.rows,
+            officeName
+        )
 
-        if (!result) {
+        if (!account) {
             return res.status(404).json({
                 ok: false,
                 error: "vat_account_not_found",
@@ -206,15 +236,24 @@ export default async function handler(req, res) {
 
         return res.status(200).json({
             ok: true,
+
             office,
             workplace_code: workplaceCode,
             ufo: ufoCode,
-            account: result.account,
+
+            office_name: officeName,
+
+            tax: "DPH",
+            account,
+
             source: "Finanční správa",
             source_url: fsData.sourceUrl,
         })
     } catch (error) {
-        console.error("payment-details error:", error)
+        console.error(
+            "guide-payment-details error:",
+            error
+        )
 
         return res.status(503).json({
             ok: false,
