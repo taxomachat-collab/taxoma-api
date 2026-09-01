@@ -64,10 +64,7 @@ async function findCurrentXlsxUrl() {
 async function loadFsData() {
     const now = Date.now()
 
-    if (
-        cache.rows &&
-        now - cache.loadedAt < CACHE_TTL
-    ) {
+    if (cache.rows && now - cache.loadedAt < CACHE_TTL) {
         return cache
     }
 
@@ -169,6 +166,16 @@ function findVatAccount(rows, officeName) {
 }
 
 export default async function handler(req, res) {
+    // Povolit volání z Frameru / budoucí domény Taxomy.
+    res.setHeader("Access-Control-Allow-Origin", "*")
+    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS")
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type")
+
+    // CORS preflight.
+    if (req.method === "OPTIONS") {
+        return res.status(204).end()
+    }
+
     if (req.method !== "GET") {
         res.setHeader("Allow", "GET")
 
